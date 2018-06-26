@@ -19,6 +19,7 @@ import android.widget.TextView;
 import com.me.bui.flighttickets.R;
 import com.me.bui.flighttickets.network.ApiClient;
 import com.me.bui.flighttickets.network.ApiService;
+import com.me.bui.flighttickets.network.model.Price;
 import com.me.bui.flighttickets.network.model.Ticket;
 
 import java.util.ArrayList;
@@ -28,8 +29,10 @@ import butterknife.BindView;
 import butterknife.ButterKnife;
 import butterknife.Unbinder;
 import io.reactivex.Observable;
+import io.reactivex.ObservableSource;
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.disposables.CompositeDisposable;
+import io.reactivex.functions.Function;
 import io.reactivex.observables.ConnectableObservable;
 import io.reactivex.observers.DisposableObserver;
 import io.reactivex.schedulers.Schedulers;
@@ -75,6 +78,7 @@ public class MainActivity extends AppCompatActivity implements TicketsAdapter.Ti
 
         ConnectableObservable<List<Ticket>> ticketsObservable = getTickets( from, to).replay();
 
+        // fetching all tickets.
         disposable.add(
                 ticketsObservable
                 .subscribeOn(Schedulers.io())
@@ -101,6 +105,48 @@ public class MainActivity extends AppCompatActivity implements TicketsAdapter.Ti
                 })
         );
 
+        // fetching price.
+        disposable.add(
+                ticketsObservable
+                .observeOn(Schedulers.io())
+                .subscribeOn(AndroidSchedulers.mainThread())
+                // convert List<Ticket> to single Ticket.
+                .flatMap(new Function<List<Ticket>, ObservableSource<Ticket>>() {
+                    @Override
+                    public ObservableSource<Ticket> apply(List<Ticket> tickets) throws Exception {
+                        return Observable.fromIterable(tickets);
+                    }
+                })
+                // fetching price
+                .flatMap(new Function<Ticket, ObservableSource<Ticket>>() {
+                    @Override
+                    public ObservableSource<Ticket> apply(Ticket ticket) throws Exception {
+                        return getPriceObservable(ticket);
+                    }
+                })
+                .subscribeWith(new DisposableObserver<Ticket>() {
+                    @Override
+                    public void onNext(Ticket ticket) {
+                        int position = ticketsList.indexOf(ticket);
+                        if (position == -1) return;
+                        ticketsList.set(position, ticket);
+                        mAdapter.notifyItemChanged(position);
+
+                    }
+
+                    @Override
+                    public void onError(Throwable e) {
+                        showError(e);
+                    }
+
+                    @Override
+                    public void onComplete() {
+
+                    }
+                })
+        );
+
+        // connect to star emmit.
         ticketsObservable.connect();
     }
 
@@ -109,6 +155,21 @@ public class MainActivity extends AppCompatActivity implements TicketsAdapter.Ti
                 .toObservable()
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread());
+    }
+
+    private Observable<Ticket> getPriceObservable(final Ticket ticket) {
+        return apiService.getPrice(ticket.getFlightNumber(), ticket.getFrom(), ticket.getTo())
+                .toObservable()
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .map(new Function<Price, Ticket>() {
+
+                    @Override
+                    public Ticket apply(Price price) throws Exception {
+                        ticket.setPrice(price);
+                        return ticket;
+                    }
+                });
     }
 
     public class GridSpacingItemDecoration extends RecyclerView.ItemDecoration {
@@ -163,7 +224,7 @@ public class MainActivity extends AppCompatActivity implements TicketsAdapter.Ti
         Log.e(TAG, "showError: " + e.getMessage());
 
         Snackbar snackbar = Snackbar
-                .make(coordinatorLayout, e.getMessage(), Snackbar.LENGTH_LONG);
+                .make(coordinatorLayout, getString(R.string.error_messege) + e.getMessage(), Snackbar.LENGTH_LONG);
         View sbView = snackbar.getView();
         TextView textView = sbView.findViewById(android.support.design.R.id.snackbar_text);
         textView.setTextColor(Color.YELLOW);
