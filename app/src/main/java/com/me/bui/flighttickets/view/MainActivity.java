@@ -22,11 +22,17 @@ import com.me.bui.flighttickets.network.ApiService;
 import com.me.bui.flighttickets.network.model.Ticket;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
 import butterknife.Unbinder;
+import io.reactivex.Observable;
+import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.disposables.CompositeDisposable;
+import io.reactivex.observables.ConnectableObservable;
+import io.reactivex.observers.DisposableObserver;
+import io.reactivex.schedulers.Schedulers;
 
 public class MainActivity extends AppCompatActivity implements TicketsAdapter.TicketsAdapterListener{
     private static final String TAG = MainActivity.class.getSimpleName();
@@ -66,6 +72,43 @@ public class MainActivity extends AppCompatActivity implements TicketsAdapter.Ti
         recyclerView.addItemDecoration(new MainActivity.GridSpacingItemDecoration(1, dpToPx(5), true));
         recyclerView.setItemAnimator(new DefaultItemAnimator());
         recyclerView.setAdapter(mAdapter);
+
+        ConnectableObservable<List<Ticket>> ticketsObservable = getTickets( from, to).replay();
+
+        disposable.add(
+                ticketsObservable
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribeWith(new DisposableObserver<List<Ticket>>(
+
+                ) {
+                    @Override
+                    public void onNext(List<Ticket> tickets) {
+                        ticketsList.clear();
+                        ticketsList.addAll(tickets);
+                        mAdapter.notifyDataSetChanged();
+                    }
+
+                    @Override
+                    public void onError(Throwable e) {
+                        showError(e);
+                    }
+
+                    @Override
+                    public void onComplete() {
+
+                    }
+                })
+        );
+
+        ticketsObservable.connect();
+    }
+
+    private Observable<List<Ticket>> getTickets(String from, String to) {
+        return apiService.searchTickets(from, to)
+                .toObservable()
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread());
     }
 
     public class GridSpacingItemDecoration extends RecyclerView.ItemDecoration {
