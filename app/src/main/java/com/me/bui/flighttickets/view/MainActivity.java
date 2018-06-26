@@ -111,14 +111,14 @@ public class MainActivity extends AppCompatActivity implements TicketsAdapter.Ti
                 .observeOn(Schedulers.io())
                 .subscribeOn(AndroidSchedulers.mainThread())
                 // convert List<Ticket> to single Ticket.
-                .flatMap(new Function<List<Ticket>, ObservableSource<Ticket>>() {
+                ./*flatMap*/concatMap(new Function<List<Ticket>, ObservableSource<Ticket>>() {
                     @Override
                     public ObservableSource<Ticket> apply(List<Ticket> tickets) throws Exception {
                         return Observable.fromIterable(tickets);
                     }
                 })
                 // fetching price
-                .flatMap(new Function<Ticket, ObservableSource<Ticket>>() {
+                ./*flatMap*/concatMap(new Function<Ticket, ObservableSource<Ticket>>() {
                     @Override
                     public ObservableSource<Ticket> apply(Ticket ticket) throws Exception {
                         return getPriceObservable(ticket);
